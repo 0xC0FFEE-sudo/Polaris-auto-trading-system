@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: polaris-synapse
+  labels:
+    name: polaris-synapse
+    environment: production
+    app: crypto-trading-system
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: polaris-synapse-quota
+  namespace: polaris-synapse
+spec:
+  hard:
+    requests.cpu: "50"
+    requests.memory: 100Gi
+    limits.cpu: "100"
+    limits.memory: 200Gi
+    persistentvolumeclaims: "20"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: polaris-synapse-limits
+  namespace: polaris-synapse
+spec:
+  limits:
+  - default:
+      cpu: "2"
+      memory: "4Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container

@@ -1,0 +1,24 @@
+[package]
+name = "compliance-gateway"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+polaris-core = { path = "../../libs/core" }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rdkafka = "0.36"
+uuid = { version = "1.0", features = ["v4"] }
+reqwest = { version = "0.11", features = ["json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+prometheus = "0.13"
+regex = "1.10"
+sha2 = "0.10"
+base64 = "0.21"

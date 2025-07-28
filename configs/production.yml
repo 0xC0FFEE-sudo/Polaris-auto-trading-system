@@ -1,0 +1,457 @@
+# Production Configuration for Polaris Synapse
+# Tony Stark's Crypto Trading System - LIVE TRADING
+
+environment: production
+
+# Kafka Configuration - High Performance Setup
+kafka:
+  brokers: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+  topics:
+    market_data_raw: "market_data.raw"
+    market_data_normalized: "market_data.normalized"
+    sentiment_analyzed: "sentiment.analyzed"
+    onchain_events: "onchain.events"
+    orders_client: "orders.client"
+    orders_incoming: "orders.incoming"
+    orders_validated: "orders.validated"
+    orders_executable: "orders.executable"
+    orders_matched: "orders.matched"
+    fills: "fills"
+    trading_decisions: "trading.decisions"
+    compliance_alerts: "compliance.alerts"
+    system_heartbeats: "system.heartbeats"
+    transactions_all: "transactions.all"
+  
+  # Production Kafka settings
+  settings:
+    replication_factor: 3
+    min_insync_replicas: 2
+    retention_hours: 168  # 7 days
+    compression_type: "lz4"
+    batch_size: 16384
+    linger_ms: 5
+    acks: "all"
+
+# Database Configuration - Production Cluster
+databases:
+  orders:
+    primary: "postgresql://matcher:${DB_PASSWORD}@orders-primary:5432/orderdb"
+    replicas:
+      - "postgresql://matcher:${DB_PASSWORD}@orders-replica-1:5432/orderdb"
+      - "postgresql://matcher:${DB_PASSWORD}@orders-replica-2:5432/orderdb"
+    max_connections: 100
+    min_connections: 20
+    connection_timeout: 30
+    ssl_mode: "require"
+  
+  compliance:
+    primary: "postgresql://compliance:${COMPLIANCE_DB_PASSWORD}@compliance-primary:5432/compliancedb"
+    replicas:
+      - "postgresql://compliance:${COMPLIANCE_DB_PASSWORD}@compliance-replica:5432/compliancedb"
+    max_connections: 50
+    min_connections: 10
+    ssl_mode: "require"
+  
+  analytics:
+    url: "postgresql://analytics:${ANALYTICS_DB_PASSWORD}@analytics-cluster:5432/analyticsdb"
+    max_connections: 30
+    min_connections: 5
+    ssl_mode: "require"
+
+# Redis Configuration - Cluster Mode
+redis:
+  cluster:
+    enabled: true
+    nodes:
+      - "redis-1:6379"
+      - "redis-2:6379"
+      - "redis-3:6379"
+      - "redis-4:6379"
+      - "redis-5:6379"
+      - "redis-6:6379"
+  password: "${REDIS_PASSWORD}"
+  max_connections: 100
+  ssl: true
+
+# Exchange Configuration - Production API Keys
+exchanges:
+  binance:
+    enabled: true
+    api_key: "${BINANCE_PROD_API_KEY}"
+    api_secret: "${BINANCE_PROD_API_SECRET}"
+    endpoint: "wss://stream.binance.com:9443/ws"
+    rate_limit: 1200
+    symbols:
+      - "BTCUSDT"
+      - "ETHUSDT"
+      - "SOLUSDT"
+      - "ADAUSDT"
+      - "DOTUSDT"
+      - "LINKUSDT"
+      - "AVAXUSDT"
+      - "MATICUSDT"
+    
+    # Production-specific settings
+    testnet: false
+    order_rate_limit: 100  # orders per 10 seconds
+    position_limits:
+      max_notional: 1000000  # $1M max position
+      max_qty_percent: 0.1   # 10% of 24h volume
+  
+  coinbase:
+    enabled: true
+    api_key: "${COINBASE_PROD_API_KEY}"
+    api_secret: "${COINBASE_PROD_API_SECRET}"
+    passphrase: "${COINBASE_PROD_PASSPHRASE}"
+    endpoint: "wss://ws-feed.pro.coinbase.com"
+    rate_limit: 600
+    symbols:
+      - "BTC-USD"
+      - "ETH-USD"
+      - "SOL-USD"
+      - "ADA-USD"
+      - "DOT-USD"
+      - "LINK-USD"
+      - "AVAX-USD"
+      - "MATIC-USD"
+    
+    sandbox: false
+    order_rate_limit: 50
+
+# Blockchain Configuration - Production RPC
+blockchains:
+  ethereum:
+    enabled: true
+    rpc_url: "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_PROD_API_KEY}"
+    backup_rpc: "https://mainnet.infura.io/v3/${INFURA_PROD_API_KEY}"
+    firehose_endpoint: "firehose-ethereum:13042"
+    websocket_url: "wss://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_PROD_API_KEY}"
+    
+    contracts:
+      - address: "0xA0b86a33E6441b8C4505E2E2E5B3E3B3E3B3E3B3"
+        name: "USDC"
+        decimals: 6
+      - address: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        name: "USDT"
+        decimals: 6
+      - address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+        name: "WBTC"
+        decimals: 8
+  
+  solana:
+    enabled: true
+    rpc_url: "https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_SOLANA_API_KEY}"
+    backup_rpc: "https://api.mainnet-beta.solana.com"
+    websocket_url: "wss://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_SOLANA_API_KEY}"
+    
+    programs:
+      - address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+        name: "Jupiter"
+      - address: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+        name: "Raydium"
+      - address: "EhpADApTih5n01Ew6u6GF8UMkeC5gQsQWywRJZoFyD9F"
+        name: "Serum"
+
+# LLM Configuration - Production Models
+llm:
+  providers:
+    openai:
+      enabled: true
+      api_key: "${OPENAI_PROD_API_KEY}"
+      model: "gpt-4-turbo-preview"
+      max_tokens: 4000
+      temperature: 0.3  # Lower temperature for production
+      rate_limit: 10000  # Higher limit for production
+      timeout: 30
+      retry_attempts: 3
+    
+    anthropic:
+      enabled: true
+      api_key: "${ANTHROPIC_PROD_API_KEY}"
+      model: "claude-3-opus-20240229"
+      max_tokens: 4000
+      temperature: 0.3
+      rate_limit: 5000
+      timeout: 30
+      retry_attempts: 3
+  
+  agents:
+    fact_agent:
+      weight: 0.65  # Slightly higher weight in production
+      confidence_threshold: 0.6  # Higher threshold
+      technical_indicators:
+        - "sma_5"
+        - "sma_10"
+        - "sma_20"
+        - "sma_50"
+        - "ema_12"
+        - "ema_26"
+        - "rsi_14"
+        - "macd"
+        - "bollinger_bands"
+        - "stochastic"
+        - "williams_r"
+    
+    subjectivity_agent:
+      weight: 0.35
+      confidence_threshold: 0.6
+      sentiment_sources:
+        - "twitter"
+        - "reddit"
+        - "news"
+        - "onchain"
+        - "telegram"
+        - "discord"
+    
+    risk_agent:
+      sharpe_threshold: 1.5  # Higher threshold for production
+      max_drawdown: 0.03     # Tighter risk control
+      position_limits:
+        "BTC/USD": 100000
+        "ETH/USD": 75000
+        "SOL/USD": 25000
+        "ADA/USD": 15000
+        "DOT/USD": 15000
+
+# Risk Management - Production Settings
+risk:
+  global:
+    max_portfolio_risk: 0.015  # 1.5% of portfolio
+    max_position_size: 0.08    # 8% of portfolio
+    max_correlation: 0.6
+    stop_loss: 0.03            # 3% stop loss
+    take_profit: 0.12          # 12% take profit
+    max_daily_loss: 0.05       # 5% max daily loss
+    circuit_breaker_loss: 0.10 # 10% circuit breaker
+  
+  per_symbol:
+    "BTC/USD":
+      max_position: 100000
+      max_daily_volume: 500000
+      volatility_limit: 0.6
+      min_liquidity: 1000000
+    "ETH/USD":
+      max_position: 75000
+      max_daily_volume: 400000
+      volatility_limit: 0.7
+      min_liquidity: 500000
+    "SOL/USD":
+      max_position: 25000
+      max_daily_volume: 150000
+      volatility_limit: 0.8
+      min_liquidity: 200000
+
+# Compliance Configuration - Production Grade
+compliance:
+  kyc:
+    required_level: "enhanced"
+    institutional_threshold: 100000
+    verification_providers:
+      primary: "jumio"
+      backup: "onfido"
+    document_retention_years: 7
+  
+  aml:
+    transaction_monitoring: true
+    real_time_screening: true
+    sanctions_screening: true
+    pep_screening: true
+    adverse_media_screening: true
+    
+    thresholds:
+      large_transaction: 10000
+      suspicious_velocity: 5    # More conservative
+      daily_limit: 250000       # Higher for production
+      risk_score_threshold: 70  # Lower threshold
+      structuring_threshold: 9000
+    
+    rules:
+      - name: "Large Transaction"
+        type: "amount"
+        threshold: 10000
+        enabled: true
+        severity: "high"
+      - name: "Velocity Check"
+        type: "velocity"
+        max_per_hour: 5
+        enabled: true
+        severity: "medium"
+      - name: "Structuring Detection"
+        type: "pattern"
+        threshold: 9000
+        enabled: true
+        severity: "high"
+      - name: "Unusual Hours"
+        type: "time"
+        start_hour: 23
+        end_hour: 5
+        enabled: true
+        severity: "low"
+      - name: "Geographic Risk"
+        type: "geography"
+        high_risk_countries: ["AF", "IR", "KP", "SY"]
+        enabled: true
+        severity: "critical"
+  
+  reporting:
+    ctr_threshold: 10000      # Currency Transaction Report
+    sar_enabled: true         # Suspicious Activity Report
+    mtr_enabled: true         # Monetary Transaction Report
+    export_schedule: "daily"
+    retention_years: 7
+
+# Monitoring Configuration - Production Monitoring
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+    scrape_interval: "5s"     # More frequent in production
+    retention: "30d"
+    external_labels:
+      environment: "production"
+      cluster: "polaris-synapse"
+  
+  grafana:
+    enabled: true
+    port: 3000
+    admin_password: "${GRAFANA_PROD_PASSWORD}"
+    smtp_host: "smtp.gmail.com:587"
+    smtp_user: "${GRAFANA_SMTP_USER}"
+    smtp_password: "${GRAFANA_SMTP_PASSWORD}"
+  
+  alerts:
+    slack_webhook: "${SLACK_PROD_WEBHOOK_URL}"
+    pagerduty_key: "${PAGERDUTY_INTEGRATION_KEY}"
+    email_smtp: "smtp.gmail.com:587"
+    email_from: "alerts@polaris-synapse.com"
+    
+    rules:
+      - name: "High Latency"
+        condition: "avg(latency) > 100ms"
+        severity: "warning"
+        duration: "5m"
+      - name: "Error Rate"
+        condition: "rate(errors) > 0.01"
+        severity: "critical"
+        duration: "2m"
+      - name: "Circuit Breaker"
+        condition: "circuit_breaker_tripped > 0"
+        severity: "critical"
+        duration: "0s"
+  
+  metrics:
+    latency_buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
+    retention_days: 90
+
+# Logging Configuration - Production Logging
+logging:
+  level: "warn"  # Less verbose in production
+  format: "json"
+  outputs:
+    - "stdout"
+    - "file:/var/log/polaris-synapse/app.log"
+    - "syslog:localhost:514"
+  
+  structured: true
+  include_caller: false  # Performance optimization
+  include_stacktrace: true
+  
+  # Log rotation
+  rotation:
+    max_size: "100MB"
+    max_files: 10
+    compress: true
+
+# Security Configuration - Production Security
+security:
+  api_keys:
+    enabled: true
+    rotation_days: 30  # More frequent rotation
+    encryption: "AES-256-GCM"
+  
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 5000  # Higher for production
+    burst_size: 500
+    ip_whitelist:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+  
+  encryption:
+    algorithm: "AES-256-GCM"
+    key_rotation_days: 7  # Weekly rotation
+    hsm_enabled: true     # Hardware Security Module
+  
+  tls:
+    enabled: true
+    cert_path: "/etc/ssl/certs/polaris-synapse.crt"
+    key_path: "/etc/ssl/private/polaris-synapse.key"
+    min_version: "1.3"
+    cipher_suites:
+      - "TLS_AES_256_GCM_SHA384"
+      - "TLS_CHACHA20_POLY1305_SHA256"
+  
+  firewall:
+    enabled: true
+    allowed_ports: [80, 443, 8080, 9090, 3000]
+    fail2ban: true
+
+# Performance Configuration - Production Optimized
+performance:
+  kafka:
+    batch_size: 32768
+    linger_ms: 1      # Lower latency
+    compression_type: "lz4"
+    buffer_memory: 67108864  # 64MB
+    max_request_size: 1048576  # 1MB
+  
+  database:
+    connection_timeout: 10
+    query_timeout: 30
+    statement_cache_size: 1000
+    prepared_statement_cache: true
+    connection_pool_size: 100
+  
+  cache:
+    ttl_seconds: 60   # Shorter TTL for production
+    max_size: 100000
+    eviction_policy: "lru"
+  
+  circuit_breaker:
+    failure_threshold: 3  # More sensitive
+    timeout_seconds: 30
+    reset_timeout_seconds: 120
+    half_open_max_calls: 5
+
+# Feature Flags - Production Features
+features:
+  sentiment_analysis: true
+  onchain_analysis: true
+  multi_exchange: true
+  paper_trading: false      # Disabled in production
+  backtesting: false        # Disabled in production
+  real_trading: true        # ENABLED FOR LIVE TRADING
+  compliance_gateway: true
+  risk_management: true
+  llm_agents: true
+  high_frequency_trading: true
+  arbitrage_detection: true
+  market_making: false      # Disabled initially
+
+# Disaster Recovery
+disaster_recovery:
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 90
+    encryption: true
+    destinations:
+      - "s3://polaris-synapse-backups"
+      - "gcs://polaris-synapse-dr"
+  
+  failover:
+    enabled: true
+    health_check_interval: 30
+    failover_timeout: 300
+    auto_failback: false  # Manual failback for safety

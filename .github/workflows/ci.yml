@@ -1,0 +1,173 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-tests:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
+    - name: Cache Cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    
+    - name: Run tests
+      run: cargo test --all-features --workspace
+
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd services/llm-agents
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest black flake8
+    
+    - name: Check formatting
+      run: |
+        cd services/llm-agents
+        black --check .
+    
+    - name: Run linting
+      run: |
+        cd services/llm-agents
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    
+    - name: Run tests
+      run: |
+        cd services/llm-agents
+        pytest
+
+  go-tests:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Test Gateway Service
+      run: |
+        cd services/gateway
+        go mod tidy
+        go test ./...
+        go vet ./...
+    
+    - name: Test Firehose Bridge
+      run: |
+        cd services/firehose_bridge
+        go mod tidy
+        go test ./...
+        go vet ./...
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [rust-tests, python-tests, go-tests]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Compliance Gateway
+      run: docker-compose build compliance-gateway
+    
+    - name: Build Market Data Handler
+      run: docker-compose build market-data-handler
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Start Infrastructure
+      run: |
+        docker-compose up -d zookeeper kafka postgres postgres-compliance redis
+        sleep 30
+    
+    - name: Run System Health Test
+      run: |
+        chmod +x scripts/test-system.sh
+        timeout 300 scripts/test-system.sh || true
+    
+    - name: Collect logs
+      if: failure()
+      run: |
+        docker-compose logs > docker-logs.txt
+    
+    - name: Upload logs
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-logs
+        path: docker-logs.txt
+    
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'

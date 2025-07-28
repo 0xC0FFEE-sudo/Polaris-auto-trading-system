@@ -1,0 +1,89 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'polaris-synapse'
+    environment: 'production'
+
+rule_files:
+  - "rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Trading Services
+  - job_name: 'market-data-handler'
+    static_configs:
+      - targets: ['market-data-handler:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: 'order-gateway'
+    static_configs:
+      - targets: ['order-gateway:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: 'risk-manager'
+    static_configs:
+      - targets: ['risk-manager:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: 'order-matching-engine'
+    static_configs:
+      - targets: ['order-matching-engine:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: 'execution-engine'
+    static_configs:
+      - targets: ['execution-engine:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: 'compliance-gateway'
+    static_configs:
+      - targets: ['compliance-gateway:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'llm-agents'
+    static_configs:
+      - targets: ['llm-agents:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'gateway'
+    static_configs:
+      - targets: ['gateway:7000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Infrastructure
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-1:9101', 'kafka-2:9102', 'kafka-3:9103']
+    metrics_path: /metrics
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Node exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

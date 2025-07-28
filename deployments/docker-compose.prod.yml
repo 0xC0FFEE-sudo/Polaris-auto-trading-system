@@ -1,0 +1,480 @@
+version: '3.8'
+
+# Production Docker Compose for Polaris Synapse
+# Tony Stark's Crypto Trading System
+
+services:
+  # Kafka Cluster
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    restart: unless-stopped
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka-1
+    container_name: kafka-1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: 12
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka-2
+    container_name: kafka-2
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+      - "9102:9102"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9102
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka-3
+    container_name: kafka-3
+    depends_on:
+      - zookeeper
+    ports:
+      - "9094:9094"
+      - "9103:9103"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29094,PLAINTEXT_HOST://localhost:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9103
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+    restart: unless-stopped
+
+  # Redis Cluster
+  redis-1:
+    image: redis:7-alpine
+    container_name: redis-1
+    ports:
+      - "7001:6379"
+      - "17001:16379"
+    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    volumes:
+      - redis-1-data:/data
+    restart: unless-stopped
+
+  redis-2:
+    image: redis:7-alpine
+    container_name: redis-2
+    ports:
+      - "7002:6379"
+      - "17002:16379"
+    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    volumes:
+      - redis-2-data:/data
+    restart: unless-stopped
+
+  redis-3:
+    image: redis:7-alpine
+    container_name: redis-3
+    ports:
+      - "7003:6379"
+      - "17003:16379"
+    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    volumes:
+      - redis-3-data:/data
+    restart: unless-stopped
+
+  # PostgreSQL Cluster
+  postgres-primary:
+    image: postgres:15-alpine
+    container_name: postgres-primary
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: matcher
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
+    volumes:
+      - postgres-primary-data:/var/lib/postgresql/data
+      - ./scripts/postgres-primary.sh:/docker-entrypoint-initdb.d/setup.sh
+    command: |
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+      -c archive_mode=on
+      -c archive_command='test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f'
+    restart: unless-stopped
+
+  postgres-replica:
+    image: postgres:15-alpine
+    container_name: postgres-replica
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: matcher
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGUSER: matcher
+      POSTGRES_PRIMARY_HOST: postgres-primary
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
+    volumes:
+      - postgres-replica-data:/var/lib/postgresql/data
+      - ./scripts/postgres-replica.sh:/docker-entrypoint-initdb.d/setup.sh
+    depends_on:
+      - postgres-primary
+    restart: unless-stopped
+
+  # Compliance Database
+  postgres-compliance:
+    image: postgres:15-alpine
+    container_name: postgres-compliance
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: compliancedb
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: ${COMPLIANCE_DB_PASSWORD}
+    volumes:
+      - postgres-compliance-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Core Services
+  market-data-handler:
+    build:
+      context: ../services/market-data-handler
+      dockerfile: Dockerfile
+    container_name: market-data-handler
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  order-gateway:
+    build:
+      context: ../services/order-gateway
+      dockerfile: Dockerfile
+    container_name: order-gateway
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+
+  risk-manager:
+    build:
+      context: ../services/risk-manager
+      dockerfile: Dockerfile
+    container_name: risk-manager
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
+
+  order-matching-engine:
+    build:
+      context: ../services/order-matching-engine
+      dockerfile: Dockerfile
+    container_name: order-matching-engine
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - DATABASE_URL=postgresql://matcher:${DB_PASSWORD}@postgres-primary:5432/orderdb
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+      - postgres-primary
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  execution-engine:
+    build:
+      context: ../services/execution-engine
+      dockerfile: Dockerfile
+    container_name: execution-engine
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - BINANCE_API_KEY=${BINANCE_PROD_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_PROD_API_SECRET}
+      - COINBASE_API_KEY=${COINBASE_PROD_API_KEY}
+      - COINBASE_API_SECRET=${COINBASE_PROD_API_SECRET}
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  compliance-gateway:
+    build:
+      context: ../services/compliance-gateway
+      dockerfile: Dockerfile
+    container_name: compliance-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - DATABASE_URL=postgresql://compliance:${COMPLIANCE_DB_PASSWORD}@postgres-compliance:5432/compliancedb
+      - RUST_LOG=info
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+      - postgres-compliance
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
+
+  llm-agents:
+    build:
+      context: ../services/llm-agents
+      dockerfile: Dockerfile
+    container_name: llm-agents
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BROKERS=kafka-1:29092,kafka-2:29093,kafka-3:29094
+      - REDIS_HOST=redis-1
+      - OPENAI_API_KEY=${OPENAI_PROD_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_PROD_API_KEY}
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+      - redis-1
+      - redis-2
+      - redis-3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/rules:/etc/prometheus/rules
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PROD_PASSWORD}
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=${GRAFANA_SMTP_USER}
+      - GF_SMTP_PASSWORD=${GRAFANA_SMTP_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    restart: unless-stopped
+
+  # Log Management
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    container_name: logstash
+    volumes:
+      - ./logging/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    ports:
+      - "5044:5044"
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  # Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - compliance-gateway
+      - llm-agents
+      - grafana
+    restart: unless-stopped
+
+volumes:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  postgres-primary-data:
+  postgres-replica-data:
+  postgres-compliance-data:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  elasticsearch-data:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

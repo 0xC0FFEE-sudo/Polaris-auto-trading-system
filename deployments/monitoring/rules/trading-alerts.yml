@@ -1,0 +1,196 @@
+groups:
+- name: trading-system
+  rules:
+  # High Latency Alerts
+  - alert: HighOrderLatency
+    expr: histogram_quantile(0.95, rate(order_latency_nanoseconds_bucket[5m])) > 100000000
+    for: 2m
+    labels:
+      severity: warning
+      service: order-processing
+    annotations:
+      summary: "High order processing latency detected"
+      description: "95th percentile order latency is {{ $value }}ns for {{ $labels.symbol }}"
+
+  - alert: CriticalOrderLatency
+    expr: histogram_quantile(0.95, rate(order_latency_nanoseconds_bucket[5m])) > 500000000
+    for: 1m
+    labels:
+      severity: critical
+      service: order-processing
+    annotations:
+      summary: "Critical order processing latency"
+      description: "95th percentile order latency is {{ $value }}ns for {{ $labels.symbol }}"
+
+  # Error Rate Alerts
+  - alert: HighErrorRate
+    expr: rate(kafka_messages_consumed_total[5m]) > 0 and rate(kafka_messages_produced_total[5m]) / rate(kafka_messages_consumed_total[5m]) < 0.95
+    for: 3m
+    labels:
+      severity: warning
+      service: message-processing
+    annotations:
+      summary: "High message processing error rate"
+      description: "Message processing success rate is below 95% for topic {{ $labels.topic }}"
+
+  # Circuit Breaker Alerts
+  - alert: CircuitBreakerTripped
+    expr: increase(circuit_breaker_tripped_total[1m]) > 0
+    for: 0s
+    labels:
+      severity: critical
+      service: risk-management
+    annotations:
+      summary: "Circuit breaker has been tripped"
+      description: "Circuit breaker tripped {{ $value }} times in the last minute"
+
+  # Risk Management Alerts
+  - alert: HighRiskViolations
+    expr: rate(risk_violations_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: warning
+      service: risk-management
+    annotations:
+      summary: "High rate of risk violations"
+      description: "Risk violations occurring at {{ $value }} per second"
+
+  - alert: ExcessivePositionExposure
+    expr: position_exposure_usd > 100000
+    for: 1m
+    labels:
+      severity: critical
+      service: risk-management
+    annotations:
+      summary: "Position exposure exceeds limits"
+      description: "Position exposure for {{ $labels.symbol }} is ${{ $value }}"
+
+  # LLM Agent Alerts
+  - alert: LLMAgentDown
+    expr: up{job="llm-agents"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: llm-agents
+    annotations:
+      summary: "LLM Agents service is down"
+      description: "LLM Agents service has been down for more than 1 minute"
+
+  - alert: LowLLMConfidence
+    expr: avg_over_time(llm_decision_confidence[10m]) < 0.6
+    for: 5m
+    labels:
+      severity: warning
+      service: llm-agents
+    annotations:
+      summary: "Low LLM decision confidence"
+      description: "Average LLM decision confidence is {{ $value }} over the last 10 minutes"
+
+  # Compliance Alerts
+  - alert: ComplianceViolation
+    expr: increase(compliance_violations_total[1m]) > 0
+    for: 0s
+    labels:
+      severity: critical
+      service: compliance
+    annotations:
+      summary: "Compliance violation detected"
+      description: "{{ $value }} compliance violations in the last minute"
+
+- name: infrastructure
+  rules:
+  # Kafka Alerts
+  - alert: KafkaConsumerLag
+    expr: kafka_consumer_lag_sum > 1000
+    for: 2m
+    labels:
+      severity: warning
+      service: kafka
+    annotations:
+      summary: "High Kafka consumer lag"
+      description: "Consumer lag is {{ $value }} messages for group {{ $labels.group }}"
+
+  - alert: KafkaDown
+    expr: up{job="kafka"} == 0
+    for: 30s
+    labels:
+      severity: critical
+      service: kafka
+    annotations:
+      summary: "Kafka broker is down"
+      description: "Kafka broker {{ $labels.instance }} has been down for more than 30 seconds"
+
+  # Database Alerts
+  - alert: DatabaseConnectionsHigh
+    expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+    for: 2m
+    labels:
+      severity: warning
+      service: database
+    annotations:
+      summary: "High database connection usage"
+      description: "Database connection usage is {{ $value | humanizePercentage }}"
+
+  - alert: DatabaseDown
+    expr: up{job="postgres"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: database
+    annotations:
+      summary: "Database is down"
+      description: "PostgreSQL database has been down for more than 1 minute"
+
+  # Redis Alerts
+  - alert: RedisDown
+    expr: up{job="redis"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: redis
+    annotations:
+      summary: "Redis is down"
+      description: "Redis instance has been down for more than 1 minute"
+
+  - alert: RedisMemoryHigh
+    expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+    for: 2m
+    labels:
+      severity: warning
+      service: redis
+    annotations:
+      summary: "Redis memory usage is high"
+      description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+- name: system
+  rules:
+  # System Resource Alerts
+  - alert: HighCPUUsage
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+      service: system
+    annotations:
+      summary: "High CPU usage"
+      description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+  - alert: HighMemoryUsage
+    expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+      service: system
+    annotations:
+      summary: "High memory usage"
+      description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+
+  - alert: DiskSpaceLow
+    expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+    for: 2m
+    labels:
+      severity: warning
+      service: system
+    annotations:
+      summary: "Low disk space"
+      description: "Disk usage is {{ $value }}% on {{ $labels.instance }} mount {{ $labels.mountpoint }}"

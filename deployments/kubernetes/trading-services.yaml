@@ -1,0 +1,412 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-data-handler
+  namespace: polaris-synapse
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: market-data-handler
+  template:
+    metadata:
+      labels:
+        app: market-data-handler
+    spec:
+      containers:
+      - name: market-data-handler
+        image: polaris-synapse/market-data-handler:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: market-data-handler
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: market-data-handler
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-gateway
+  namespace: polaris-synapse
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: order-gateway
+  template:
+    metadata:
+      labels:
+        app: order-gateway
+    spec:
+      containers:
+      - name: order-gateway
+        image: polaris-synapse/order-gateway:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-gateway
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: order-gateway
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-manager
+  namespace: polaris-synapse
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: risk-manager
+  template:
+    metadata:
+      labels:
+        app: risk-manager
+    spec:
+      containers:
+      - name: risk-manager
+        image: polaris-synapse/risk-manager:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: risk-manager
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: risk-manager
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-matching-engine
+  namespace: polaris-synapse
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-matching-engine
+  template:
+    metadata:
+      labels:
+        app: order-matching-engine
+    spec:
+      containers:
+      - name: order-matching-engine
+        image: polaris-synapse/order-matching-engine:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secrets
+              key: orders-db-url
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 2
+            memory: 4Gi
+          limits:
+            cpu: 4
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-matching-engine
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: order-matching-engine
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-engine
+  namespace: polaris-synapse
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: execution-engine
+  template:
+    metadata:
+      labels:
+        app: execution-engine
+    spec:
+      containers:
+      - name: execution-engine
+        image: polaris-synapse/execution-engine:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: BINANCE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: exchange-secrets
+              key: binance-api-key
+        - name: BINANCE_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: exchange-secrets
+              key: binance-api-secret
+        - name: COINBASE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: exchange-secrets
+              key: coinbase-api-key
+        - name: COINBASE_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: exchange-secrets
+              key: coinbase-api-secret
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 1
+            memory: 2Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-engine
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: execution-engine
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliance-gateway
+  namespace: polaris-synapse
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: compliance-gateway
+  template:
+    metadata:
+      labels:
+        app: compliance-gateway
+    spec:
+      containers:
+      - name: compliance-gateway
+        image: polaris-synapse/compliance-gateway:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secrets
+              key: compliance-db-url
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compliance-gateway
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: compliance-gateway
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-agents
+  namespace: polaris-synapse
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llm-agents
+  template:
+    metadata:
+      labels:
+        app: llm-agents
+    spec:
+      containers:
+      - name: llm-agents
+        image: polaris-synapse/llm-agents:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: openai-api-key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: anthropic-api-key
+        resources:
+          requests:
+            cpu: 2
+            memory: 4Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 4
+            memory: 8Gi
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-agents
+  namespace: polaris-synapse
+spec:
+  selector:
+    app: llm-agents
+  ports:
+  - port: 8000
+    targetPort: 8000
